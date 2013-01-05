@@ -328,6 +328,7 @@ export CXXFLAGS="$RPM_OPT_FLAGS -fno-rtti -fno-exceptions"
 %endif
 
 %configure %{common_flags} \
+    --enable-texture-float \
     --enable-osmesa \
     --enable-xcb \
     --with-dri-driverdir=%{_libdir}/dri \
@@ -351,7 +352,6 @@ export CXXFLAGS="$RPM_OPT_FLAGS -fno-rtti -fno-exceptions"
     --disable-gallium-llvm \
     --with-gallium-drivers=swrast \
     --enable-dri \
-    --enable-texture-float \
 %endif
     %{?dri_drivers}
 
