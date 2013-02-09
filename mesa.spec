@@ -49,7 +49,7 @@
 Summary: Mesa graphics libraries
 Name: mesa
 Version: 9.0.1
-Release: 3%{?dist}
+Release: 4%{?dist}
 License: MIT
 Group: System Environment/Libraries
 URL: http://www.mesa3d.org
