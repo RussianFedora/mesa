@@ -1,5 +1,4 @@
 %if 0%{?rhel}
-%define rhel_no_hw_arches ppc ppc64 ppc64p7
 %define with_private_llvm 1
 %else
 %define with_private_llvm 0
@@ -15,7 +14,7 @@
 %endif
 
 # S390 doesn't have video cards, but we need swrast for xserver's GLX
-%ifarch s390 s390x  %{?rhel_no_hw_arches}
+%ifarch s390 s390x
 %define with_hardware 0
 %define dri_drivers --with-dri-drivers=swrast
 %else
@@ -48,8 +47,8 @@
 
 Summary: Mesa graphics libraries
 Name: mesa
-Version: 9.0.1
-Release: 4%{?dist}
+Version: 9.0.3
+Release: 1%{?dist}
 License: MIT
 Group: System Environment/Libraries
 URL: http://www.mesa3d.org
@@ -61,14 +60,13 @@ Source0: ftp://ftp.freedesktop.org/pub/%{name}/%{version}/MesaLib-%{version}.tar
 Source3: make-git-snapshot.sh
 
 # $ git diff-tree -p mesa-9.0.1..origin/9.0 > `git describe origin/9.0`.patch
-Patch0: mesa-9.0.1-22-gd0a9ab2.patch
+#Patch0: mesa-9.0.1-22-gd0a9ab2.patch
 
 #Patch7: mesa-7.1-link-shared.patch
 Patch9: mesa-8.0-llvmpipe-shmget.patch
 Patch11: mesa-8.0-nouveau-tfp-blacklist.patch
 Patch12: mesa-8.0.1-fix-16bpp.patch
 Patch13: mesa-9.0.1-less-cxx-please.patch
-Patch14: mesa-9-r600g-limit-memory.patch
 
 BuildRequires: pkgconfig autoconf automake libtool
 %if %{with_hardware}
@@ -277,7 +275,7 @@ Mesa shared glapi
 %prep
 %setup -q -n Mesa-%{version}%{?snapshot}
 #setup -q -n mesa-%{gitdate}
-%patch0 -p1 -b .git
+#patch0 -p1 -b .git
 %patch11 -p1 -b .nouveau
 
 # this fastpath is:
@@ -292,8 +290,6 @@ Mesa shared glapi
 #patch12 -p1 -b .16bpp
 
 %patch13 -p1 -b .less-cpp
-
-%patch14 -p1 -b .r600g-limit
 
 # default to dri (not xlib) for libGL on all arches
 # XXX please fix upstream
@@ -316,13 +312,15 @@ sed -i 's/\<libdrm_nouveau\>/&2/' configure.ac
 
 autoreconf --install  
 
-export CFLAGS="$RPM_OPT_FLAGS"
+# the NDEBUG thing is a hack for llvm 3.1 at least. will be removed once
+# i fix llvm to be less stupid [ajax]
+export CFLAGS="$RPM_OPT_FLAGS -DNDEBUG"
 # C++ note: we never say "catch" in the source.  we do say "typeid" once,
 # in an assert, which is patched out above.  LLVM doesn't use RTTI or throw.
 #
 # We do say 'catch' in the clover and d3d1x state trackers, but we're not
 # building those yet.
-export CXXFLAGS="$RPM_OPT_FLAGS -fno-rtti -fno-exceptions"
+export CXXFLAGS="$CFLAGS -fno-rtti -fno-exceptions"
 %ifarch %{ix86}
 # i do not have words for how much the assembly dispatch code infuriates me
 %define common_flags --enable-selinux --enable-pic --disable-asm
@@ -353,7 +351,7 @@ export CXXFLAGS="$RPM_OPT_FLAGS -fno-rtti -fno-exceptions"
 %endif
 %else
     --disable-gallium-llvm \
-    --with-gallium-drivers=swrast \
+    --with-gallium-drivers= \
     --enable-dri \
 %endif
     %{?dri_drivers}
@@ -469,6 +467,8 @@ rm -rf $RPM_BUILD_ROOT
 %if 0%{?with_vmware}
 %{_libdir}/dri/vmwgfx_dri.so
 %endif
+%else
+%exclude %{_sysconfdir}/drirc
 %endif
 %{_libdir}/libdricore*.so*
 %{_libdir}/dri/swrast_dri.so
@@ -578,11 +578,20 @@ rm -rf $RPM_BUILD_ROOT
 %endif
 
 %changelog
-* Thu Jan 31 2013 Jerome Glisse <jglisse@redhat.com> 9.0.1-4.R
-- force r600g to stay in gpu memory limit
-
-* Sat Jan  5 2013 Arkady L. Shane <ashejn@russianfedora.ru> 9.0.1-3.R
+* Wed Mar 13 2013 Arkady L. Shane <ashejn@russianfedora.ru> 9.0.3-1.R
 - rebuilt with --enable-texture-float
+
+* Tue Mar 05 2013 Adam Jackson <ajax@redhat.com> 9.0.3-1
+- Mesa 9.0.3
+
+* Wed Feb 27 2013 Dan Horák <dan[at]danny.cz>
+- /etc/drirc is always created, so exclude it on platforms without hw drivers
+
+* Tue Feb 26 2013 Adam Jackson <ajax@redhat.com> 9.0.1-5
+- Fix swrast on s390* to be classic not softpipe
+
+* Thu Jan 31 2013 Jerome Glisse <jglisse@redhat.com> 9.0.1-4
+- force r600g to stay in gpu memory limit
 
 * Thu Dec 20 2012 Adam Jackson <ajax@redhat.com> 9.0.1-3
 - mesa-9.0.1-22-gd0a9ab2.patch: Sync with git
