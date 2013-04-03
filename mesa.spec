@@ -42,38 +42,45 @@
 
 %define _default_patch_fuzz 2
 
-#define gitdate 20120924
+#define gitdate 20130213
 #% define snapshot 
 
 Summary: Mesa graphics libraries
 Name: mesa
-Version: 9.0.3
-Release: 1%{?dist}
+Version: 9.1
+Release: 3%{?dist}
 License: MIT
 Group: System Environment/Libraries
 URL: http://www.mesa3d.org
 
-#Source0: http://downloads.sf.net/mesa3d/MesaLib-%{version}.tar.bz2
 #Source0: http://www.mesa3d.org/beta/MesaLib-%{version}%{?snapshot}.tar.bz2
 Source0: ftp://ftp.freedesktop.org/pub/%{name}/%{version}/MesaLib-%{version}.tar.bz2
 #Source0: %{name}-%{gitdate}.tar.xz
 Source3: make-git-snapshot.sh
 
-# $ git diff-tree -p mesa-9.0.1..origin/9.0 > `git describe origin/9.0`.patch
-#Patch0: mesa-9.0.1-22-gd0a9ab2.patch
+# src/gallium/auxiliary/postprocess/pp_mlaa* have an ... interestingly worded license.
+# Source4 contains email correspondence clarifying the license terms.
+# Fedora opts to ignore the optional part of clause 2 and treat that code as 2 clause BSD.
+Source4: Mesa-MLAA-License-Clarification-Email.txt
 
+# git diff-tree -p mesa-9.1..origin/9.1 > `git describe origin/9.1`.patch
+Patch0: mesa-9.1-53-gd0ccb5b.patch
+
+Patch1: nv50-fix-build.patch
+Patch2: intel-revert-gl3.patch
 #Patch7: mesa-7.1-link-shared.patch
 Patch9: mesa-8.0-llvmpipe-shmget.patch
-Patch11: mesa-8.0-nouveau-tfp-blacklist.patch
+#Patch11: mesa-8.0-nouveau-tfp-blacklist.patch
 Patch12: mesa-8.0.1-fix-16bpp.patch
-Patch13: mesa-9.0.1-less-cxx-please.patch
+Patch14: i965-hack-hiz-snb-fix.patch
+
 
 BuildRequires: pkgconfig autoconf automake libtool
 %if %{with_hardware}
 BuildRequires: kernel-headers
 BuildRequires: xorg-x11-server-devel
 %endif
-BuildRequires: libdrm-devel >= 2.4.38
+BuildRequires: libdrm-devel >= 2.4.42
 BuildRequires: libXxf86vm-devel
 BuildRequires: expat-devel
 BuildRequires: xorg-x11-proto-devel
@@ -86,6 +93,7 @@ BuildRequires: libXi-devel
 BuildRequires: libXmu-devel
 BuildRequires: elfutils
 BuildRequires: python
+BuildRequires: gettext
 %if %{with_hardware}
 %if 0%{?with_llvm}
 %if 0%{?with_private_llvm}
@@ -275,8 +283,10 @@ Mesa shared glapi
 %prep
 %setup -q -n Mesa-%{version}%{?snapshot}
 #setup -q -n mesa-%{gitdate}
-#patch0 -p1 -b .git
-%patch11 -p1 -b .nouveau
+%patch0 -p1 -b .git
+%patch1 -p1 -b .nv50rtti
+%patch2 -p1 -b .nogl3
+#%patch11 -p1 -b .nouveau
 
 # this fastpath is:
 # - broken with swrast classic
@@ -289,8 +299,8 @@ Mesa shared glapi
 #patch9 -p1 -b .shmget
 #patch12 -p1 -b .16bpp
 
-%patch13 -p1 -b .less-cpp
-
+# hack from chromium - awaiting real upstream fix
+%patch14 -p1 -b .snbfix
 # default to dri (not xlib) for libGL on all arches
 # XXX please fix upstream
 sed -i 's/^default_driver.*$/default_driver="dri"/' configure.ac
@@ -307,6 +317,8 @@ sed -i 's/llvm-tblgen/mesa-private-&/' src/gallium/drivers/radeon/Makefile
 sed -i 's/\<libdrm_nouveau\>/&2/' configure.ac
 %endif
 %endif
+
+cp %{SOURCE4} docs/
 
 %build
 
@@ -340,6 +352,7 @@ export CXXFLAGS="$CFLAGS -fno-rtti -fno-exceptions"
     --with-egl-platforms=x11,drm%{?with_wayland:,wayland} \
     --enable-shared-glapi \
     --enable-gbm \
+    --disable-opencl \
 %if %{with_hardware}
     %{?with_vmware:--enable-xa} \
 %if 0%{?with_llvm}
@@ -436,7 +449,7 @@ rm -rf $RPM_BUILD_ROOT
 
 %files dri-filesystem
 %defattr(-,root,root,-)
-%doc docs/COPYING
+%doc docs/COPYING docs/Mesa-MLAA-License-Clarification-Email.txt
 %dir %{_libdir}/dri
 
 %files libglapi
@@ -456,6 +469,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/dri/r600_dri.so
 %if 0%{?with_llvm} && 0%{?with_radeonsi}
 %{_libdir}/dri/radeonsi_dri.so
+%{_libdir}/libllvmradeon9.1.0.so
 %endif
 %ifarch %{ix86} x86_64 ia64
 %{_libdir}/dri/i915_dri.so
@@ -515,6 +529,9 @@ rm -rf $RPM_BUILD_ROOT
 %{_includedir}/GLES2/gl2platform.h
 %{_includedir}/GLES2/gl2.h
 %{_includedir}/GLES2/gl2ext.h
+%{_includedir}/GLES3/gl3platform.h
+%{_includedir}/GLES3/gl3.h
+%{_includedir}/GLES3/gl3ext.h
 %{_libdir}/pkgconfig/glesv1_cm.pc
 %{_libdir}/pkgconfig/glesv2.pc
 %{_libdir}/libGLESv1_CM.so
@@ -578,20 +595,33 @@ rm -rf $RPM_BUILD_ROOT
 %endif
 
 %changelog
-* Wed Mar 13 2013 Arkady L. Shane <ashejn@russianfedora.ru> 9.0.3-1.R
-- rebuilt with --enable-texture-float
+* Wed Apr  3 2013 Arkady L. Shane <ashejn@russianfedora.ru> 9.1-3.R
+- rebuild with --enable-texture-float
 
-* Tue Mar 05 2013 Adam Jackson <ajax@redhat.com> 9.0.3-1
-- Mesa 9.0.3
+* Tue Mar 19 2013 Adam Jackson <ajax@redhat.com> 9.1-3
+- mesa-9.1-53-gd0ccb5b.patch: Sync with today's git
 
-* Wed Feb 27 2013 Dan Horák <dan[at]danny.cz>
+* Tue Mar 19 2013 Dave Airlie <airlied@redhat.com> 9.1-2
+- add SNB hang workaround from chromium
+
+* Fri Mar 08 2013 Adam Jackson <ajax@redhat.com> 9.1-1
+- Mesa 9.1
+
+* Wed Feb 27 2013 Dan Horák <dan[at]danny.cz> - 9.1-0.4
 - /etc/drirc is always created, so exclude it on platforms without hw drivers
 
-* Tue Feb 26 2013 Adam Jackson <ajax@redhat.com> 9.0.1-5
-- Fix swrast on s390* to be classic not softpipe
+* Tue Feb 26 2013 Adam Jackson <ajax@redhat.com> 9.1-0.3
+- Fix s390*'s swrast to be classic not softpipe
 
-* Thu Jan 31 2013 Jerome Glisse <jglisse@redhat.com> 9.0.1-4
-- force r600g to stay in gpu memory limit
+* Tue Feb 19 2013 Jens Petersen <petersen@redhat.com> - 9.1-0.2
+- build against llvm-3.2
+- turn on radeonsi
+
+* Wed Feb 13 2013 Dave Airlie <airlied@redhat.com> 9.1-0.1
+- snapshot mesa 9.1 branch
+
+* Tue Jan 15 2013 Tom Callaway <spot@fedoraproject.org> 9.0.1-4
+- clarify license on pp_mlaa* files
 
 * Thu Dec 20 2012 Adam Jackson <ajax@redhat.com> 9.0.1-3
 - mesa-9.0.1-22-gd0a9ab2.patch: Sync with git
